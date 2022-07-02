@@ -74,19 +74,19 @@ namespace MyBlog.Data
             return await context.Tags.ToListAsync();
         }
 
-        public Task<BlogPost> SaveBlogPostAsync(BlogPost item)
+        public async Task<BlogPost> SaveBlogPostAsync(BlogPost item)
         {
-            throw new NotImplementedException();
+            return (await SaveItem(item)) as BlogPost;
         }
 
-        public Task<Category> SaveCategoryAsync(Category item)
+        public async Task<Category> SaveCategoryAsync(Category item)
         {
-            throw new NotImplementedException();
+            return (await SaveItem(item)) as Category;
         }
 
-        public Task<Tag> SaveTagAsync(Tag item)
+        public async Task<Tag> SaveTagAsync(Tag item)
         {
-            throw new NotImplementedException();
+            return (await SaveItem(item)) as Tag;
         }
 
         #region Helper Function
@@ -95,6 +95,38 @@ namespace MyBlog.Data
             using var context = factory.CreateDbContext();
             context.Remove(item);
             await context.SaveChangesAsync();
+        }
+
+        private async Task<IMyBlogItem> SaveItem(IMyBlogItem item)
+        {
+            using var context = factory.CreateDbContext();
+            if (item.Id == 0)
+            {
+                context.Add(item);
+            } else
+            {
+                if (item is BlogPost)
+                {
+                    var post = item as BlogPost;
+                    var currentPost = await context.BlogPosts.Include(p => p.Category).Include(p => p.Tags).FirstOrDefaultAsync(p => p.Id == post.Id);
+
+                    currentPost.PublishDate = post.PublishDate;
+                    currentPost.Title = post.Title;
+                    currentPost.Text = post.Text;
+
+                    var ids = post.Tags.Select(t => t.Id);
+                    currentPost.Tags = context.Tags.Where(t => ids.Contains(t.Id)).ToList();
+                    currentPost.Category = await context.Categories.FirstOrDefaultAsync(c => c.Id == post.Category.Id);
+                    await context.SaveChangesAsync();
+
+                } else
+                {
+                    context.Entry(item).State = EntityState.Modified;
+                }
+            }
+
+            await context.SaveChangesAsync();
+            return item;
         }
         #endregion
     }
